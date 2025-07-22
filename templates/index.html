@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>MPRH Control Panel</title>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="container">
+    <header class="header-bar">
+      <h1>MPRH Control Panel</h1>
+      <div class="mode-indicator" id="mode-indicator">Modo: --</div>
+    </header>
+    <main>
+      <section class="status-cards">
+        <div class="card" id="card-temp">
+          <h2>Temperatura</h2>
+          <p class="value" id="temp-value">-- °C</p>
+        </div>
+        <div class="card" id="card-flow">
+          <h2>Caudal</h2>
+          <p class="value" id="flow-value">-- ml/min</p>
+        </div>
+        <div class="card" id="card-pressure">
+          <h2>Presión</h2>
+          <p class="value" id="pressure-value">-- mmHg</p>
+        </div>
+        <div class="card" id="card-bubble">
+          <h2>Burbuja</h2>
+          <p class="value" id="bubble-state">--</p>
+        </div>
+        <div class="card" id="card-resistance">
+          <h2>Resistencia</h2>
+          <p class="value" id="resistance-value">-- mmHg·min/L</p>
+        </div>
+        <div class="card" id="card-pump">
+          <h2>Bomba</h2>
+          <p class="value" id="pump-state">--</p>
+          <button id="toggle-pump" class="btn-control">Encender/Apagar</button>
+        </div>
+      </section>
+      <section class="charts">
+        <div class="chart-container">
+          <h3>Temperatura vs Tiempo</h3>
+          <canvas id="temp-chart" width="500" height="200"></canvas>
+        </div>
+        <div class="chart-container">
+          <h3>Caudal vs Tiempo</h3>
+          <canvas id="flow-chart" width="500" height="200"></canvas>
+        </div>
+      </section>
+    </main>
+    <footer class="controls">
+      <button id="emergency-stop" class="btn-emergency">🚨 Parada Emergencia</button>
+      <button id="mode-switch" class="btn-control">Cambiar Modo</button>
+      <button id="toggle-cooling" class="btn-control" style="display:none;">Activar refrigeración</button>
+    </footer>
+  </div>
+  <!-- 👇 SIEMPRE carga Chart.js primero -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="{{ url_for('static', filename='main.js') }}"></script>
+</body>
+</html>
