@@ -94,8 +94,3 @@ Para cambiar a modo **real** (lecturas desde Arduino), edita la variable USE_MOC
 
 ## Licencia
 
-MIT (o la que decidas)
-
----
-
-Proyecto para fines educativos/desarrollo por Pablo Adrián Fuentes Villarreal
