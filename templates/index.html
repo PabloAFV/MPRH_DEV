@@ -12,53 +12,38 @@
     <header class="header-bar">
       <h1>MPRH Control Panel</h1>
       <div class="mode-indicator" id="mode-indicator">Modo: --</div>
+      <!-- badge de conexión lo inserta main.js -->
     </header>
+
     <main>
       <section class="status-cards">
-        <div class="card" id="card-temp">
-          <h2>Temperatura</h2>
-          <p class="value" id="temp-value">-- °C</p>
-        </div>
-        <div class="card" id="card-flow">
-          <h2>Flujo</h2>
-          <p class="value" id="flow-value">-- ml/min</p>
-        </div>
-        <div class="card" id="card-pressure">
-          <h2>Presión</h2>
-          <p class="value" id="pressure-value">-- mmHg</p>
-        </div>
-        <div class="card" id="card-bubble">
-          <h2>Burbuja</h2>
-          <p class="value" id="bubble-state">--</p>
-        </div>
-        <div class="card" id="card-resistance">
-          <h2>Resistencia</h2>
-          <p class="value" id="resistance-value">-- mmHg·min/L</p>
-        </div>
-        <div class="card" id="card-pump">
-          <h2>Bomba</h2>
-          <p class="value" id="pump-state">--</p>
-          <button id="toggle-pump" class="btn-control">Encender/Apagar</button>
-        </div>
+        <div class="card"><h2>Temperatura</h2><p class="value" id="temp-value">-- °C</p></div>
+        <div class="card"><h2>Flujo</h2><p class="value" id="flow-value">-- ml/min</p></div>
+        <div class="card"><h2>Presión</h2><p class="value" id="pressure-value">-- mmHg</p></div>
+        <div class="card"><h2>Burbuja</h2><p class="value" id="bubble-state">--</p></div>
+        <div class="card"><h2>Resistencia</h2><p class="value" id="resistance-value">-- mmHg·min/L</p></div>
+        <div class="card" id="card-pump"><h2>Bomba</h2><p class="value" id="pump-state">--</p><button id="toggle-pump" class="btn-control">Encender/Apagar</button></div>
       </section>
+
       <section class="charts">
         <div class="chart-container">
           <h3>Temperatura vs Tiempo</h3>
-          <canvas id="temp-chart" width="500" height="200"></canvas>
+          <canvas id="temp-chart"></canvas>
         </div>
         <div class="chart-container">
           <h3>Flujo vs Tiempo</h3>
-          <canvas id="flow-chart" width="500" height="200"></canvas>
+          <canvas id="flow-chart"></canvas>
         </div>
       </section>
     </main>
+
     <footer class="controls">
       <button id="emergency-stop" class="btn-emergency">🚨 Parada Emergencia</button>
       <button id="mode-switch" class="btn-control">Cambiar Modo</button>
       <button id="toggle-cooling" class="btn-control" style="display:none;">Activar refrigeración</button>
     </footer>
   </div>
-  <!-- 👇 SIEMPRE carga Chart.js primero -->
+
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="{{ url_for('static', filename='main.js') }}"></script>
 </body>
