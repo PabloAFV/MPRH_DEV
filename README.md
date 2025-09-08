@@ -6,6 +6,12 @@ La interfaz permite monitorear las variables de **dos riñones** (presiones, tem
 
 ---
 
+💡 **Sugerencia para principiantes**  
+Si en algún momento no entiendes un paso, puedes copiar y pegar este README en una herramienta de inteligencia artificial (como ChatGPT) y pedir que te explique cada comando y cada instrucción con más detalle.  
+De esta manera tendrás una guía personalizada mientras aprendes a usar VSCode, Python y Git.
+
+---
+
 ## 📦 Requisitos previos
 
 Antes de empezar, asegúrate de tener:
