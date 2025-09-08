@@ -11,54 +11,81 @@
   <div class="container">
     <header class="header-bar">
       <h1>MPRH Control Panel</h1>
-      <div class="mode-indicator" id="mode-indicator">Modo: --</div>
+      <div class="right-head">
+        <div class="mode-indicator" id="mode-indicator">Modo: --</div>
+        <!-- badge de conexión lo inserta main.js -->
+      </div>
     </header>
+
+    <!-- Tabs de riñones -->
+    <nav class="kidney-tabs" role="tablist" aria-label="Riñones">
+      <button id="tab-k1" class="tab active" role="tab" aria-selected="true" aria-controls="panel-k1">Riñón 1</button>
+      <button id="tab-k2" class="tab" role="tab" aria-selected="false" aria-controls="panel-k2">Riñón 2</button>
+    </nav>
+
     <main>
+      <!-- Panel de estado -->
       <section class="status-cards">
-        <div class="card" id="card-temp">
+        <div class="card">
           <h2>Temperatura</h2>
           <p class="value" id="temp-value">-- °C</p>
         </div>
-        <div class="card" id="card-flow">
+        <div class="card">
           <h2>Flujo</h2>
           <p class="value" id="flow-value">-- ml/min</p>
         </div>
-        <div class="card" id="card-pressure">
-          <h2>Presión</h2>
-          <p class="value" id="pressure-value">-- mmHg</p>
+
+        <!-- Presión (solo una tarjeta visible según pestaña activa) -->
+        <div class="card kidney-only" data-kidney="1">
+          <h2>Presión R1</h2>
+          <p class="value" id="pressure1-value">-- mmHg</p>
         </div>
-        <div class="card" id="card-bubble">
+        <div class="card kidney-only" data-kidney="2" style="display:none;">
+          <h2>Presión R2</h2>
+          <p class="value" id="pressure2-value">-- mmHg</p>
+        </div>
+
+        <div class="card">
           <h2>Burbuja</h2>
           <p class="value" id="bubble-state">--</p>
         </div>
-        <div class="card" id="card-resistance">
-          <h2>Resistencia</h2>
+
+        <div class="card">
+          <h2>Resistencia (R<span id="res-kidney">1</span>)</h2>
           <p class="value" id="resistance-value">-- mmHg·min/L</p>
         </div>
+
         <div class="card" id="card-pump">
           <h2>Bomba</h2>
           <p class="value" id="pump-state">--</p>
           <button id="toggle-pump" class="btn-control">Encender/Apagar</button>
         </div>
       </section>
+
+      <!-- Gráficas -->
       <section class="charts">
         <div class="chart-container">
           <h3>Temperatura vs Tiempo</h3>
-          <canvas id="temp-chart" width="500" height="200"></canvas>
+          <canvas id="temp-chart"></canvas>
         </div>
         <div class="chart-container">
           <h3>Flujo vs Tiempo</h3>
-          <canvas id="flow-chart" width="500" height="200"></canvas>
+          <canvas id="flow-chart"></canvas>
+        </div>
+        <div class="chart-container full">
+          <h3>Presión R<span id="chart-kidney">1</span> vs Tiempo</h3>
+          <canvas id="pressure-chart"></canvas>
         </div>
       </section>
     </main>
+
     <footer class="controls">
       <button id="emergency-stop" class="btn-emergency">🚨 Parada Emergencia</button>
       <button id="mode-switch" class="btn-control">Cambiar Modo</button>
       <button id="toggle-cooling" class="btn-control" style="display:none;">Activar refrigeración</button>
     </footer>
   </div>
-  <!-- 👇 SIEMPRE carga Chart.js primero -->
+
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="{{ url_for('static', filename='main.js') }}"></script>
 </body>
