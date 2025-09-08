@@ -1,0 +1,272 @@
+/****************************************************
+ * MPRH – Firmware LEGACY++ (dos sensores de presión)
+ *
+ * Protocolo de salida (UNA línea cada ~200 ms):
+ *   T:<°C>,F:<ml/min>,P:<mmHg>,P1:<mmHg>,P2:<mmHg>,B:<0/1>,PUMP:<0/1>,COOL:<0/1>,MODE:<MAN/AUTO>
+ *   - 'P' mantiene compatibilidad (replica P1_EMA redondeado).
+ *   - P1 y P2 siempre presentes (si algún sensor no aplica, manda el último válido o 0).
+ *
+ * Comandos de entrada por Serial (LEGACY):
+ *   SET_PUMP:0|1
+ *   SET_COOL:0|1
+ *   SET_MODE:MAN|AUTO
+ *
+ * Notas:
+ * - Temperatura se actualiza cada ~2 s y se lee "al vuelo" para el frame.
+ * - Presión con EMA (α=0.2) para lectura estable "en vivo".
+ * - Debounce de burbuja (N consecutivos HIGH).
+ * - Motor ON/OFF por SET_PUMP (pasos por micros, frecuencia según desiredRPM).
+ * - Modo: solo se reporta (MAN/AUTO). La UI actual ya bloquea bomba en AUTO desde backend.
+ ****************************************************/
+
+#include <Arduino.h>
+#include <math.h>
+
+/* ===== Pines ===== */
+#define DIR_PIN          8
+#define STEP_PIN         9
+#define SENSOR1_PIN      A2   // Presión riñón 1
+#define SENSOR2_PIN      A3   // Presión riñón 2
+#define THERMISTOR_PIN   A1   // NTC 10K
+#define OUT1_PIN         2    // Burbuja
+
+/* ===== Motor ===== */
+float desiredRPM = 15.0;          // Ajustable en futuro (SET_RPM opcional)
+const int microsteps = 16;
+const int stepsPerRevolution = 200 * microsteps; // 1600
+unsigned long lastStepUs = 0;
+unsigned long stepDelayUs = 0;
+bool stepState = false;
+
+/* ===== Temperatura (NTC 10k) ===== */
+const int SERIES_RESISTOR = 10000; // 10k
+const float BETA = 3950.0;
+const float R0   = 10000.0;        // 10k @25°C
+const float T0K  = 25.0 + 273.15;
+unsigned long lastTempMs = 0;
+const unsigned long TEMP_INTERVAL_MS = 2000; // 2 s
+float lastTempC = NAN;
+
+/* ===== Presión (2 sensores) =====
+ * - Muestreo cada 100 ms
+ * - EMA para estabilidad en vivo
+ * - (Opcional) percentiles cada 60 s (no enviados a UI)
+ */
+const unsigned long PRESS_SAMPLE_MS = 100;
+const unsigned long PRESS_PROC_MS   = 60000;
+
+unsigned long lastPressMs = 0;
+unsigned long lastProcMs  = 0;
+
+float p1Buf[100], p2Buf[100];
+int   p1Idx = 0,   p2Idx = 0;
+
+bool  p1Init = false, p2Init = false;
+float p1EMA = 0.0,   p2EMA = 0.0;
+
+/* ===== Burbuja con debounce ===== */
+const unsigned long BUBBLE_MS = 100;
+const int BUBBLE_N = 3;
+unsigned long lastBubbleMs = 0;
+int bubbleHighCount = 0;
+bool bubbleState = false;
+
+/* ===== Control estado ===== */
+bool pumpOn   = false;
+bool cooling  = false;   // reservado
+bool modeAuto = false;   // MAN por defecto (false)
+
+/* ===== Tx frame ===== */
+unsigned long lastFrameMs = 0;
+const unsigned long FRAME_MS = 200;
+
+/* ===== Utilidades ===== */
+float ntcToCelsius(float resistance) {
+  float kelvin = 1.0f / ((log(resistance / R0) / BETA) + (1.0f / T0K));
+  return kelvin - 273.15f;
+}
+
+// Conversión V->mmHg (ajusta si tu curva es distinta)
+inline float vToPressure(float v) {
+  // Línea típica; tu código anterior usaba algo cercano a 80.8*V - 98.46
+  // o 85.3*V - 144.7. Ajusta aquí si necesitas.
+  return 80.8f * v - 98.46f;
+}
+
+void recalcStepDelay() {
+  float freqHz = (desiredRPM * stepsPerRevolution) / 60.0f;
+  if (freqHz < 1.0f) freqHz = 1.0f;
+  stepDelayUs = (unsigned long)(1000000.0f / (2.0f * freqHz)); // /2 por HIGH/LOW
+}
+
+void setup() {
+  Serial.begin(115200);
+
+  pinMode(STEP_PIN, OUTPUT);
+  pinMode(DIR_PIN, OUTPUT);
+  digitalWrite(DIR_PIN, HIGH);  // sentido por defecto
+  pinMode(SENSOR1_PIN, INPUT);
+  pinMode(SENSOR2_PIN, INPUT);
+  pinMode(THERMISTOR_PIN, INPUT);
+  pinMode(OUT1_PIN, INPUT);
+
+  // Arranque seguro
+  pumpOn = false;   // bomba apagada
+  modeAuto = false; // MAN por defecto
+  recalcStepDelay();
+}
+
+/* ===== Comandos LEGACY ===== */
+void handleCommand(const String& raw) {
+  String s = raw; s.trim();
+  if (!s.length()) return;
+  int colon = s.indexOf(':');
+  String key = s, val = "";
+  if (colon >= 0) { key = s.substring(0, colon); val = s.substring(colon + 1); }
+  key.trim(); val.trim();
+
+  if (key == "SET_PUMP") {
+    pumpOn = (val == "1");
+    if (!pumpOn) { digitalWrite(STEP_PIN, LOW); stepState = false; }
+  } else if (key == "SET_COOL") {
+    cooling = (val == "1");  // reservado
+  } else if (key == "SET_MODE") {
+    modeAuto = (val == "AUTO");
+    // No forzamos bomba aquí; el backend ya bloquea en AUTO.
+  }
+}
+
+/* ===== Lecturas ===== */
+void readTemperatureIfDue() {
+  unsigned long now = millis();
+  if (now - lastTempMs >= TEMP_INTERVAL_MS) {
+    lastTempMs = now;
+    int adc = analogRead(THERMISTOR_PIN);
+    if (adc < 1) adc = 1;
+    float R = SERIES_RESISTOR * ((1023.0f / (float)adc) - 1.0f);
+    lastTempC = ntcToCelsius(R);
+  }
+}
+
+void readPressureIfDue() {
+  unsigned long now = millis();
+  if (now - lastPressMs >= PRESS_SAMPLE_MS) {
+    lastPressMs = now;
+
+    // Sensor 1
+    int r1 = analogRead(SENSOR1_PIN);
+    float v1 = r1 * (5.0f / 1023.0f);
+    float p1 = vToPressure(v1);
+    p1Buf[p1Idx++] = p1; if (p1Idx >= 100) p1Idx = 0;
+    const float alpha = 0.2f;
+    if (!p1Init) { p1EMA = p1; p1Init = true; } else { p1EMA = alpha*p1 + (1-alpha)*p1EMA; }
+
+    // Sensor 2
+    int r2 = analogRead(SENSOR2_PIN);
+    float v2 = r2 * (5.0f / 1023.0f);
+    float p2 = vToPressure(v2);
+    p2Buf[p2Idx++] = p2; if (p2Idx >= 100) p2Idx = 0;
+    if (!p2Init) { p2EMA = p2; p2Init = true; } else { p2EMA = alpha*p2 + (1-alpha)*p2EMA; }
+  }
+
+  // (Opcional) cálculo por ventana cada 60 s (percentiles, PAM) – si lo quieres para logs:
+  if (millis() - lastProcMs >= PRESS_PROC_MS) {
+    lastProcMs = millis();
+    // Aquí podrías ordenar copias y calcular p95/p05, PAM, etc.
+    // No se envía a la UI en el protocolo legacy.
+  }
+}
+
+void readBubbleIfDue() {
+  unsigned long now = millis();
+  if (now - lastBubbleMs >= BUBBLE_MS) {
+    lastBubbleMs = now;
+    bool high = (digitalRead(OUT1_PIN) == HIGH);
+    if (high) { if (bubbleHighCount < BUBBLE_N) bubbleHighCount++; }
+    else { bubbleHighCount = 0; }
+    bubbleState = (bubbleHighCount >= BUBBLE_N);
+  }
+}
+
+/* ===== Motor ===== */
+void stepperTick() {
+  if (!pumpOn) return;
+  unsigned long us = micros();
+  if ((us - lastStepUs) >= stepDelayUs) {
+    lastStepUs = us;
+    digitalWrite(STEP_PIN, stepState);
+    stepState = !stepState;
+  }
+}
+
+/* ===== Flujo (estimado) =====
+ * Puedes ajustar la constante según tu bomba. Aquí usamos
+ * la misma relación aproximada que venían usando en el sketch nuevo,
+ * pero es una estimación hasta que calibremos.
+ */
+float estimateFlowMlMin() {
+  // Ejemplo basado en tu fórmula anterior (conservadora):
+  // Caudal (ml/min) ≈ K * desiredRPM, donde K lo ajustas por calibración.
+  // Para empezar, usa 0.5 ml/min por RPM (sólo placeholder).
+  const float K = 0.5f;
+  float q = K * desiredRPM;
+  if (q < 0) q = 0;
+  return q;
+}
+
+/* ===== Frame de salida ===== */
+void sendFrameIfDue() {
+  unsigned long now = millis();
+  if (now - lastFrameMs < FRAME_MS) return;
+  lastFrameMs = now;
+
+  // Leer temperatura "al vuelo" para que el frame tenga dato fresco
+  int adc = analogRead(THERMISTOR_PIN);
+  if (adc < 1) adc = 1;
+  float R = SERIES_RESISTOR * ((1023.0f / (float)adc) - 1.0f);
+  float tempC = ntcToCelsius(R);
+  lastTempC = tempC; // actualizar cache
+
+  // Flujo estimado
+  int flowMlMin = (int)round(estimateFlowMlMin());
+
+  // Presiones (EMA, redondeadas)
+  int p1 = (int)round(p1EMA);
+  int p2 = (int)round(p2EMA);
+
+  // Compat principal: P = P1
+  int P = p1;
+
+  // Modo
+  const char* modeStr = modeAuto ? "AUTO" : "MAN";
+
+  // Emitir UNA línea limpia (sin logs extra)
+  Serial.print("T:");     Serial.print(tempC, 1);
+  Serial.print(",F:");    Serial.print(flowMlMin);
+  Serial.print(",P:");    Serial.print(P);
+  Serial.print(",P1:");   Serial.print(p1);
+  Serial.print(",P2:");   Serial.print(p2);
+  Serial.print(",B:");    Serial.print(bubbleState ? 1 : 0);
+  Serial.print(",PUMP:"); Serial.print(pumpOn ? 1 : 0);
+  Serial.print(",COOL:"); Serial.print(cooling ? 1 : 0);
+  Serial.print(",MODE:"); Serial.println(modeStr);
+}
+
+void loop() {
+  // 1) Comandos entrantes
+  while (Serial.available()) {
+    String line = Serial.readStringUntil('\n');
+    handleCommand(line);
+  }
+
+  // 2) Sensores
+  readTemperatureIfDue();
+  readPressureIfDue();
+  readBubbleIfDue();
+
+  // 3) Motor
+  stepperTick();
+
+  // 4) Telemetría
+  sendFrameIfDue();
+}
