@@ -62,11 +62,14 @@
         </div>
       </section>
 
-      <!-- Gráficas -->
-      <section class="charts">
+      <!-- Botón Toggle para mostrar/ocultar gráficas -->
+      <button id="toggle-charts" class="btn-control">Ver gráficas</button>
+
+      <!-- Gráficas (inicia oculto; usar botón para mostrar) -->
+      <section id="charts-section" class="charts collapsed">
         <div class="chart-container">
-          <h3>Temperatura vs Tiempo</h3>
-          <canvas id="temp-chart"></canvas>
+          <h3>Resistencia R<span id="chart-kidney">1</span> vs Tiempo</h3>
+          <canvas id="res-chart"></canvas>
         </div>
         <div class="chart-container">
           <h3>Flujo vs Tiempo</h3>

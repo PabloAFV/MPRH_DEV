@@ -22,6 +22,10 @@
   const tabK2 = $('tab-k2');
   const chartKidneySpan = $('chart-kidney');
 
+  // Toggle de gráficas
+  const chartsSection   = document.getElementById('charts-section');
+  const btnToggleCharts = document.getElementById('toggle-charts');
+
   // Badge de conexión
   let connBadge = document.getElementById('conn-badge');
   if (!connBadge) {
@@ -55,15 +59,15 @@
   const primaryColor = getComputedStyle(document.documentElement).getPropertyValue('--primary').trim();
   const dangerColor  = getComputedStyle(document.documentElement).getPropertyValue('--danger').trim();
 
-  const tempCtx     = document.getElementById('temp-chart').getContext('2d');
+  const resCtx      = document.getElementById('res-chart').getContext('2d');
   const flowCtx     = document.getElementById('flow-chart').getContext('2d');
   const pressureCtx = document.getElementById('pressure-chart').getContext('2d');
 
-  const tempChart = new Chart(tempCtx, {
+  const resChart = new Chart(resCtx, {
     type: 'line',
-    data: { labels: [], datasets: [{ label: '°C', data: [], borderColor: primaryColor, backgroundColor: primaryColor, fill: false, pointRadius: 0, tension: 0.2 }] },
+    data: { labels: [], datasets: [{ label: 'mmHg·min/L', data: [], borderColor: primaryColor, backgroundColor: primaryColor, fill: false, pointRadius: 0, tension: 0.2 }] },
     options: { responsive: true, animation: false, maintainAspectRatio: false,
-      scales: { x:{title:{display:true,text:'Tiempo (s)'}}, y:{title:{display:true,text:'Temperatura (°C)'}} } }
+      scales: { x:{title:{display:true,text:'Tiempo (s)'}}, y:{title:{display:true,text:'Resistencia (mmHg·min/L)'}} } }
   });
 
   const flowChart = new Chart(flowCtx, {
@@ -168,7 +172,7 @@
       btnEstop.disabled        = !manual;
 
       // Series
-      addPoint(tempChart, temp);
+      if (R != null) addPoint(resChart, R); else addPoint(resChart, NaN);
       addPoint(flowChart, flow);
 
       // Presión del riñón activo a la gráfica
@@ -218,6 +222,12 @@
         body: JSON.stringify({ coolingOn: !st.coolingOn })
       });
     } catch (e) { console.error(e); }
+  });
+
+  // Toggle de gráficas (mostrar/ocultar bloque)
+  btnToggleCharts?.addEventListener('click', () => {
+    chartsSection.classList.toggle('collapsed');
+    btnToggleCharts.textContent = chartsSection.classList.contains('collapsed') ? 'Ver gráficas' : 'Ocultar gráficas';
   });
 
   // Init
