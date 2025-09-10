@@ -1,7 +1,13 @@
 (() => {
   const $ = (id) => document.getElementById(id);
-  const safeNum = (v, d = 0) => (typeof v === 'number' && !isNaN(v) ? v : d);
-  const asIntOrNull = (v) => (typeof v === 'number' && !isNaN(v) ? Math.round(v) : null);
+  const safeNum = (v, d = 0) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : d;
+  };
+  const asIntOrNull = (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? Math.round(n) : null;
+  };
 
   // Elementos
   const modeIndicator   = $('mode-indicator');
@@ -20,7 +26,8 @@
 
   const tabK1 = $('tab-k1');
   const tabK2 = $('tab-k2');
-  const chartKidneySpan = $('chart-kidney');
+  // Puede haber más de un span con el mismo id "chart-kidney" en el HTML
+  const chartKidneySpans = Array.from(document.querySelectorAll('#chart-kidney'));
 
   // Toggle de gráficas
   const chartsSection   = document.getElementById('charts-section');
@@ -38,21 +45,6 @@
 
   // Estado de pestaña activa
   let activeKidney = 1;
-  function setActiveKidney(k) {
-    activeKidney = (k === 2) ? 2 : 1;
-    chartKidneySpan.textContent = String(activeKidney);
-    resKidneySpan.textContent   = String(activeKidney);
-    tabK1.classList.toggle('active', activeKidney === 1);
-    tabK2.classList.toggle('active', activeKidney === 2);
-
-    // Mostrar solo las tarjetas de presión del riñón activo
-    document.querySelectorAll('.kidney-only').forEach(el => {
-      const targetKidney = parseInt(el.dataset.kidney);
-      el.style.display = (targetKidney === activeKidney) ? '' : 'none';
-    });
-  }
-  tabK1.addEventListener('click', () => setActiveKidney(1));
-  tabK2.addEventListener('click', () => setActiveKidney(2));
 
   // Gráficas
   const maxPoints = 50;
@@ -94,6 +86,15 @@
     }
     chart.update('none');
   }
+  function resetChart(chart) {
+    chart.data.labels.length = 0;
+    chart.data.datasets[0].data.length = 0;
+    chart.update();
+  }
+  function updateKidneyLabels() {
+    resKidneySpan.textContent = String(activeKidney);
+    chartKidneySpans.forEach(el => (el.textContent = String(activeKidney)));
+  }
 
   function setConnectedBadge(connected) {
     if (connected) {
@@ -134,7 +135,7 @@
       const connected = (typeof s.connected === 'boolean') ? s.connected : true;
       setConnectedBadge(connected);
 
-      // Valores básicos
+      // Valores básicos (aceptando strings)
       const temp      = safeNum(s.temperature, 0);
       const flow      = safeNum(s.flow, 0);
       const press     = asIntOrNull(s.pressure);
@@ -171,12 +172,11 @@
       btnPump.disabled         = !manual;
       btnEstop.disabled        = !manual;
 
-      // Series
+      // Series (usar riñón activo)
       if (R != null) addPoint(resChart, R); else addPoint(resChart, NaN);
       addPoint(flowChart, flow);
 
-      // Presión del riñón activo a la gráfica
-      const pSel = (activeKidney === 2) ? (p2 != null ? p2 : null) : (p1 != null ? p1 : null);
+      const pSel = (activeKidney === 2) ? (lastP2 != null ? lastP2 : null) : (lastP1 != null ? lastP1 : null);
       if (pSel != null) addPoint(pressureChart, pSel);
       else addPoint(pressureChart, NaN);
 
@@ -230,8 +230,32 @@
     btnToggleCharts.textContent = chartsSection.classList.contains('collapsed') ? 'Ver gráficas' : 'Ocultar gráficas';
   });
 
+  // Cambio de pestaña: limpiar series dependientes y refrescar de inmediato
+  function onKidneyChange(k) {
+    activeKidney = (k === 2) ? 2 : 1;
+    tabK1.classList.toggle('active', activeKidney === 1);
+    tabK2.classList.toggle('active', activeKidney === 2);
+
+    // Mostrar solo las tarjetas de presión del riñón activo
+    document.querySelectorAll('.kidney-only').forEach(el => {
+      const targetKidney = parseInt(el.dataset.kidney);
+      el.style.display = (targetKidney === activeKidney) ? '' : 'none';
+    });
+
+    // Actualizar etiquetas "R?"
+    updateKidneyLabels();
+
+    // Limpiar gráficas que dependen del riñón y refrescar muestra
+    resetChart(resChart);
+    resetChart(pressureChart);
+    fetchAndUpdate();
+  }
+
+  tabK1.addEventListener('click', () => onKidneyChange(1));
+  tabK2.addEventListener('click', () => onKidneyChange(2));
+
   // Init
-  setActiveKidney(1);
-  fetchAndUpdate();
+  updateKidneyLabels();
+  onKidneyChange(1);
   setInterval(fetchAndUpdate, 2000);
 })();
